@@ -25,6 +25,7 @@ contract ClubVote {
     event MemberAdded(address indexed member);
     event ProposalCreated(uint256 indexed id, address indexed proposer, string description, uint256 deadline);
     event Voted(uint256 indexed id, address indexed voter, bool support);
+    event ProposalFinalized(uint256 indexed id, bool passed, uint256 yesVotes, uint256 noVotes);
 
     error NotAdmin();
     error NotMember();
@@ -36,6 +37,8 @@ contract ClubVote {
     error ProposalNotFound();
     error VotingClosed();
     error AlreadyVoted();
+    error VotingNotEnded();
+    error AlreadyFinalized();
 
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
@@ -95,6 +98,21 @@ contract ClubVote {
         }
 
         emit Voted(id, msg.sender, support);
+    }
+
+    function finalize(uint256 id) external onlyMember {
+        if (id >= proposalCount) revert ProposalNotFound();
+        Proposal storage p = proposals[id];
+        if (block.timestamp < p.deadline) revert VotingNotEnded();
+        if (p.finalized) revert AlreadyFinalized();
+
+        uint256 totalVotes = p.yesVotes + p.noVotes;
+        bool quorumReached = totalVotes * 100 >= p.memberCountAtCreation * quorumPercent;
+
+        p.finalized = true;
+        p.passed = quorumReached && p.yesVotes > p.noVotes;
+
+        emit ProposalFinalized(id, p.passed, p.yesVotes, p.noVotes);
     }
 
     function _addMember(address member) internal {
